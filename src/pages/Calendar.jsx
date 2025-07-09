@@ -6,6 +6,7 @@ import { supabase } from '../supabaseClient';
 import { FaCalendarAlt, FaChevronLeft, FaChevronRight, FaTimes } from 'react-icons/fa';
 import { FiCalendar, FiBook, FiAward, FiSun } from 'react-icons/fi';
 import EventForm from '../components/EventForm'; // Adjust path if needed
+import { showInstantNotification } from "../utils/notify";
 
 const localizer = momentLocalizer(moment);
 
@@ -16,6 +17,43 @@ const Calendar = ({ role }) => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const setupNotificationSubscription = async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id;
+
+      const subscription = supabase
+        .channel("calendar-events-channel")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "calendar_events",
+          },
+          (payload) => {
+            const newEvent = payload.new;
+
+            if (newEvent.created_by !== currentUserId) {
+              showInstantNotification(
+                "📅 New Calendar Event",
+                `"${newEvent.title}" was just added.`
+              );
+            }
+          }
+        )
+        .subscribe();
+    };
+
+    setupNotificationSubscription();
+
+    
+
+    return () => {
+      supabase.removeChannel("calendar-events-channel");
+    };
+  }, []);
 
   const CustomToolbar = (toolbar) => {
     const goToToday = () => {
@@ -72,6 +110,9 @@ const Calendar = ({ role }) => {
       const { data, error } = await supabase.from('calendar_events').select('*');
       if (error) throw error;
 
+     
+
+
       const mapped = data.map(event => ({
         id: event.id,
         title: event.title,
@@ -95,24 +136,132 @@ const Calendar = ({ role }) => {
     fetchEvents();
   }, []);
 
-  const handleSaveEvent = async (newEvent) => {
-    try {
-      const { error } = await supabase.from('calendar_events').insert([
-        { ...newEvent, created_by: supabase.auth.getUser()?.user?.id },
-      ]);
+ const handleSaveEvent = async (newEvent) => {
+  try {
+    // Get the current authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log("Logged in user:", user);
+    
+    if (authError) throw authError;
+    if (!user) throw new Error('No authenticated user');
 
-      if (error) {
-        console.error('Error saving:', error);
-        alert('Failed to save event');
-        return;
-      }
+    // Add the user ID to the event data
+    const eventWithUser = {
+      ...newEvent,
+      created_by: user.id,
+      // Assuming this should be true for academic events
+    };
 
-      setShowForm(false);
-      fetchEvents();
-    } catch (err) {
-      console.error(err);
+    const { data: insertedEvent, error } = await supabase
+  .from('calendar_events')
+  .insert([eventWithUser])
+  .select()
+  .single();
+
+if (error) throw error;
+
+// ✅ Now schedule reminders
+const reminderOffsets = insertedEvent.custom_reminder_offsets ?? [5, 2, 0.0333]; // default values in hours
+const dueTime = new Date(`${insertedEvent.date}T${insertedEvent.start_time}`);
+
+const { data: students, error: studentError } = await supabase
+  .from("profiles")
+  .select("id")
+  .neq("role", "authority");
+
+if (studentError) throw studentError;
+
+const notifications = [];
+
+for (const student of students) {
+  for (const offset of reminderOffsets) {
+    const sendAt = new Date(dueTime.getTime() - offset * 60 * 60 * 1000);
+    notifications.push({
+      user_id: student.id,
+      event_id: insertedEvent.id,
+      title: `⏰ Reminder: ${insertedEvent.title}`,
+      body: `Due in ${offset >= 1 ? offset + ' hours' : Math.round(offset * 60) + ' minutes'}`,
+      send_at: sendAt.toISOString(),
+    });
+  }
+}
+
+await supabase.from("notifications").insert(notifications);
+
+    setShowForm(false);
+    fetchEvents(); // Refresh the events list
+  } catch (err) {
+    console.error('Error saving event:', err);
+    alert('Failed to save event: ' + err.message);
+  }
+};
+
+const handleUpdateEvent = async (updatedEvent) => {
+  try {
+    // First, validate we have an ID
+    if (!updatedEvent.id) {
+      throw new Error('Event ID is missing - cannot update');
     }
-  };
+
+    // Get current user to verify ownership
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    if (!user) throw new Error('No authenticated user');
+
+    // Prepare update data
+    const updateData = {
+      title: updatedEvent.title,
+      description: updatedEvent.description,
+      date: updatedEvent.date,
+      start_time: updatedEvent.start_time || null, // Handle empty times
+      end_time: updatedEvent.end_time || null,
+      category: updatedEvent.category,
+      semester: updatedEvent.semester,
+      event_scope: updatedEvent.event_scope,
+      is_public: updatedEvent.is_public,
+      reminder_time: updatedEvent.reminder_time || null,
+      updated_at: new Date().toISOString() // Track when updated
+    };
+
+    // Perform the update with proper error handling
+    const { error } = await supabase
+      .from('calendar_events')
+      .update(updateData)
+      .eq('id', updatedEvent.id)
+      .eq('created_by', user.id); // Ensure only owner can update
+
+    if (error) throw error;
+
+    // Refresh UI
+    setShowForm(false);
+    setSelectedEvent(null);
+    fetchEvents();
+    
+  } catch (err) {
+    console.error('Update error:', err);
+    alert(`Failed to update event: ${err.message}`);
+  }
+};
+
+
+
+const handleDeleteEvent = async (eventId) => {
+  const confirmDelete = window.confirm('Are you sure you want to delete this event?');
+  if (!confirmDelete) return;
+
+  try {
+    const { error } = await supabase.from('calendar_events').delete().eq('id', eventId);
+    if (error) throw error;
+
+    setSelectedEvent(null);
+    fetchEvents();
+  } catch (err) {
+    console.error('Delete error:', err);
+    alert('Failed to delete event');
+  }
+};
+
+
 
   const getEventIcon = (category) => {
     switch (category) {
@@ -239,22 +388,51 @@ const Calendar = ({ role }) => {
                 <p className="text-gray-700">{selectedEvent.description}</p>
               </div>
             )}
-            <div className="flex justify-end">
-              <button onClick={() => setSelectedEvent(null)} className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
-                Close
-              </button>
-            </div>
+            <div className="flex justify-between mt-4">
+  {role === 'authority' && (
+    <div className="space-x-2">
+      <button
+        onClick={() => {
+          setShowForm(true);
+          setShowForm(true);
+        }}
+        className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-700"
+      >
+        Edit
+      </button>
+      <button
+        onClick={() => handleDeleteEvent(selectedEvent.id)}
+        className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded hover:bg-red-700"
+      >
+        Delete
+      </button>
+    </div>
+  )}
+  <button
+    onClick={() => setSelectedEvent(null)}
+    className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+  >
+    Close
+  </button>
+</div>
+
           </div>
         </div>
       )}
 
       {/* Add Event Form Modal */}
       {showForm && (
-        <EventForm
-          onClose={() => setShowForm(false)}
-          onSave={handleSaveEvent}
-        />
-      )}
+  <EventForm
+    onClose={() => {
+      setShowForm(false);
+      setSelectedEvent(null);
+    }}
+    onSave={selectedEvent ? handleUpdateEvent : handleSaveEvent}
+    initialData={selectedEvent}
+    isEditing={!!selectedEvent}
+  />
+)}
+
     </div>
   );
 };

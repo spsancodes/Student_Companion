@@ -1,12 +1,13 @@
-import React from 'react';
+import React from "react";
 
-const Timer = () => {
+export default function Timer() {
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold text-center mb-4">⏱️ Timer</h1>
-      {/* Your timer logic goes here */}
+    <div className="p-4 h-screen overflow-hidden">
+      <iframe
+        src="/pomo.html"
+        title="Pomodoro Timer"
+        className="w-full h-full rounded-xl shadow-xl border-2 border-yellow-800"
+      />
     </div>
   );
-};
-
-export default Timer;
+}

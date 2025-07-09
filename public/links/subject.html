@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Links</title>
+  <style>
+    /* Reset and base */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      margin: 0;
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    h1 {
+      margin-bottom: 30px;
+      color: #222;
+      font-weight: 700;
+      font-size: 2rem;
+    }
+    .input-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 25px;
+      max-width: 600px;
+      width: 100%;
+    }
+    input[type="text"] {
+      flex-grow: 1;
+      padding: 12px 15px;
+      font-size: 1rem;
+      border: 1.8px solid #ccc;
+      border-radius: 6px;
+      transition: border-color 0.3s;
+    }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #4a90e2;
+      box-shadow: 0 0 8px rgba(74, 144, 226, 0.4);
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 1rem;
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background-color 0.3s, box-shadow 0.3s;
+      user-select: none;
+    }
+    button:hover {
+      background-color: #357ABD;
+      box-shadow: 0 4px 12px rgba(53, 122, 189, 0.4);
+    }
+    #linksContainer {
+      width: 100%;
+      max-width: 600px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+      padding: 20px 30px;
+    }
+    #linksContainer div {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    #linksContainer div:last-child {
+      border-bottom: none;
+    }
+    #linksContainer a {
+      flex-grow: 1;
+      font-size: 1rem;
+      color: #4a90e2;
+      text-decoration: none;
+      word-break: break-word;
+    }
+    #linksContainer a:hover {
+      text-decoration: underline;
+    }
+    #linksContainer button {
+      background-color: #f44336;
+      margin-left: 10px;
+      padding: 6px 12px;
+      font-size: 0.9rem;
+      border-radius: 4px;
+      transition: background-color 0.3s;
+    }
+    #linksContainer button:hover {
+      background-color: #d32f2f;
+    }
+    #linksContainer button.edit-btn {
+      background-color: #ffa726;
+    }
+    #linksContainer button.edit-btn:hover {
+      background-color: #fb8c00;
+    }
+
+    /* Delete confirmation message styles */
+    #deleteMessageBox {
+      background: #fff3cd;
+      color: #856404;
+      padding: 12px 16px;
+      border: 1px solid #ffeeba;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      text-align: center;
+      max-width: 600px;
+      width: 100%;
+      font-weight: 600;
+    }
+    #deleteMessageBox button {
+      margin-left: 10px;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #deleteMessageBox button.confirm {
+      background: #d9534f;
+      color: white;
+    }
+    #deleteMessageBox button.confirm:hover {
+      background: #c9302c;
+    }
+    #deleteMessageBox button.cancel {
+      background: #6c757d;
+      color: white;
+    }
+    #deleteMessageBox button.cancel:hover {
+      background: #5a6268;
+    }
+  </style>
+</head>
+<body>
+  <h1>Save a Link</h1>
+  <div class="input-group">
+    <input type="text" id="titleInput" placeholder="Enter link title" />
+    <input type="text" id="urlInput" placeholder="Paste your link here" />
+    <button onclick="saveLink()">Save Link</button>
+  </div>
+
+  <!-- Delete confirmation message container will be inserted here dynamically -->
+
+  <div id="linksContainer"></div>
+
+  <!-- Firebase + Firestore -->
+  <script type="module">
+    import { db } from "/links/firebase-config.js";
+
+    import {
+      collection,
+      addDoc,
+      getDocs,
+      doc,
+      deleteDoc,
+      updateDoc,
+    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    const subject = localStorage.getItem("selectedSubject");
+    if (!subject) {
+      alert("No subject selected! Redirecting...");
+      window.location.href = "index.html";
+    }
+
+    const linksContainer = document.getElementById("linksContainer");
+
+    async function loadLinks() {
+      linksContainer.innerHTML = "";
+
+      const linksRef = collection(db, "subjects", subject, "links");
+      const snapshot = await getDocs(linksRef);
+
+      snapshot.forEach((docSnap) => {
+        const linkData = docSnap.data();
+
+        const linkDiv = document.createElement("div");
+
+        linkDiv.innerHTML = `
+          <a href="${linkData.url}" target="_blank" rel="noopener noreferrer">${linkData.title || linkData.url}</a>
+          <button class="edit-btn" onclick="editLink('${docSnap.id}', '${escapeQuotes(linkData.title || '')}', '${escapeQuotes(linkData.url)}')">Edit</button>
+          <button onclick="deleteLink('${docSnap.id}')">Delete</button>
+        `;
+
+        linksContainer.appendChild(linkDiv);
+      });
+    }
+
+    function escapeQuotes(str) {
+      return str.replace(/'/g, "\\'");
+    }
+
+    async function saveLink() {
+      const title = document.getElementById("titleInput").value.trim();
+      const url = document.getElementById("urlInput").value.trim();
+
+      if (!url) {
+        alert("Please enter a URL");
+        return;
+      }
+
+      try {
+        await addDoc(collection(db, "subjects", subject, "links"), { title, url });
+        document.getElementById("titleInput").value = "";
+        document.getElementById("urlInput").value = "";
+        loadLinks();
+      } catch (error) {
+        console.error("Error saving link:", error);
+        alert("Failed to save link. See console.");
+      }
+    }
+
+    let pendingDeleteId = null;
+
+    function showDeleteMessage(linkId) {
+      pendingDeleteId = linkId;
+
+      // Remove any existing message box first
+      const oldBox = document.getElementById("deleteMessageBox");
+      if (oldBox) oldBox.remove();
+
+      const messageBox = document.createElement("div");
+      messageBox.id = "deleteMessageBox";
+      messageBox.innerHTML = `
+        Are you sure you want to delete this link?
+        <button class="confirm" onclick="confirmDelete()">Yes</button>
+        <button class="cancel" onclick="cancelDelete()">No</button>
+      `;
+
+      // Insert above the links container
+      linksContainer.parentNode.insertBefore(messageBox, linksContainer);
+    }
+
+    window.deleteLink = function(linkId) {
+      showDeleteMessage(linkId);
+    };
+
+    window.confirmDelete = async function() {
+      if (!pendingDeleteId) return;
+
+      try {
+        await deleteDoc(doc(db, "subjects", subject, "links", pendingDeleteId));
+        pendingDeleteId = null;
+        removeDeleteBox();
+        loadLinks();
+      } catch (error) {
+        console.error("Error deleting link:", error);
+        alert("Failed to delete link. See console.");
+      }
+    };
+
+    window.cancelDelete = function() {
+      pendingDeleteId = null;
+      removeDeleteBox();
+    };
+
+    function removeDeleteBox() {
+      const box = document.getElementById("deleteMessageBox");
+      if (box) box.remove();
+    }
+
+    window.editLink = async function (linkId, currentTitle, currentUrl) {
+      const newTitle = prompt("Edit Title:", currentTitle);
+      if (newTitle === null) return;
+      const newUrl = prompt("Edit URL:", currentUrl);
+      if (newUrl === null) return;
+
+      if (!newUrl.trim()) {
+        alert("URL cannot be empty");
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, "subjects", subject, "links", linkId), {
+          title: newTitle.trim(),
+          url: newUrl.trim(),
+        });
+        loadLinks();
+      } catch (error) {
+        console.error("Error updating link:", error);
+        alert("Failed to update link. See console.");
+      }
+    };
+
+    window.saveLink = saveLink;
+
+    window.onload = loadLinks;
+  </script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { supabase } from './supabaseClient';
 // Auth Pages
 import Login from './components/Login';
 import Signup from './components/Signup';
+import './App.css'
 
 // Main Dashboard
 import Dashboard from './components/Dashboard';
@@ -17,6 +18,10 @@ import Links from './pages/links';
 import ToDo from './pages/ToDo';
 import Timer from './pages/Timer';
 import Calendar from './pages/Calendar';
+import ReminderSettings from './pages/ReminderSettings';
+
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -113,6 +118,7 @@ function App() {
             <Route path="/todo" element={<ToDo />} />
             <Route path="/timer" element={<Timer />} />
             <Route path="/calendar" element={<Calendar role={role} />} />
+            <Route path="/reminder-settings" element={<ReminderSettings />} />
 
             <Route path="*" element={<Navigate to="/" />} />
           </>
@@ -120,6 +126,13 @@ function App() {
       </Routes>
     </Router>
   );
+  return (
+    <>
+      {/* Your routes/components */}
+      <ToastContainer position="top-right" autoClose={5000} />
+    </>
+  );
 }
+
 
 export default App;

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Links</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      margin: 0;
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+      color: #222;
+      font-weight: 700;
+      font-size: 2rem;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 25px;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    input[type="text"] {
+      flex-grow: 1;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      border: 1.5px solid #ccc;
+      border-radius: 6px;
+      transition: border-color 0.3s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #4a90e2;
+      box-shadow: 0 0 6px rgba(74, 144, 226, 0.3);
+    }
+
+    button {
+      padding: 10px 16px;
+      font-size: 0.95rem;
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background-color 0.3s, box-shadow 0.3s;
+      user-select: none;
+    }
+
+    button:hover {
+      background-color: #357ABD;
+      box-shadow: 0 3px 8px rgba(53, 122, 189, 0.3);
+    }
+
+    .card-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      max-width: 600px;
+      margin-top: 15px;
+    }
+
+    .link-card {
+      background: #fff;
+      padding: 10px 14px;
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .link-title {
+      font-weight: 500;
+      font-size: 0.95rem;
+      color: #3498db;
+      text-decoration: none;
+      word-break: break-word;
+      flex-grow: 1;
+    }
+
+    .link-title:hover {
+      text-decoration: underline;
+    }
+
+    .link-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .edit-btn,
+    .delete-btn {
+      font-size: 0.8rem;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: none;
+      color: white;
+    }
+
+    .edit-btn {
+      background-color: #f0ad4e;
+    }
+
+    .edit-btn:hover {
+      background-color: #ec971f;
+    }
+
+    .delete-btn {
+      background-color: #e74c3c;
+    }
+
+    .delete-btn:hover {
+      background-color: #c0392b;
+    }
+  </style>
+</head>
+<body>
+  <h1>Save a Link</h1>
+  <div class="input-group">
+    <input type="text" id="titleInput" placeholder="Enter link title" />
+    <input type="text" id="urlInput" placeholder="Paste your link here" />
+    <button onclick="saveLink()">Save Link</button>
+  </div>
+
+  <div id="linksContainer" class="card-container"></div>
+
+  <!-- Firebase + Firestore -->
+  <script type="module">
+    import { db } from "/links/firebase-config.js";
+
+    import {
+      collection,
+      addDoc,
+      getDocs,
+      doc,
+      deleteDoc,
+      updateDoc,
+    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    const subject = localStorage.getItem("selectedSubject");
+    if (!subject) {
+      alert("No subject selected! Redirecting...");
+      window.location.href = "index.html";
+    }
+
+    const linksContainer = document.getElementById("linksContainer");
+
+    async function loadLinks() {
+      linksContainer.innerHTML = "";
+
+      const linksRef = collection(db, "subjects", subject, "links");
+      const snapshot = await getDocs(linksRef);
+
+      snapshot.forEach((docSnap) => {
+        const linkData = docSnap.data();
+
+        const linkDiv = document.createElement("div");
+        linkDiv.className = "link-card";
+
+        const linkAnchor = document.createElement("a");
+        linkAnchor.href = linkData.url;
+        linkAnchor.target = "_blank";
+        linkAnchor.rel = "noopener noreferrer";
+        linkAnchor.textContent = linkData.title || linkData.url;
+        linkAnchor.className = "link-title";
+
+        const actionDiv = document.createElement("div");
+        actionDiv.className = "link-actions";
+
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "Edit";
+        editBtn.className = "edit-btn";
+        editBtn.onclick = () => editLink(docSnap.id, linkData.title || "", linkData.url);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Delete";
+        deleteBtn.className = "delete-btn";
+        deleteBtn.onclick = () => deleteLink(docSnap.id);
+
+        actionDiv.appendChild(editBtn);
+        actionDiv.appendChild(deleteBtn);
+
+        linkDiv.appendChild(linkAnchor);
+        linkDiv.appendChild(actionDiv);
+
+        linksContainer.appendChild(linkDiv);
+      });
+    }
+
+    async function saveLink() {
+      const title = document.getElementById("titleInput").value.trim();
+      const url = document.getElementById("urlInput").value.trim();
+
+      if (!url) {
+        alert("Please enter a URL");
+        return;
+      }
+
+      try {
+        await addDoc(collection(db, "subjects", subject, "links"), { title, url });
+        document.getElementById("titleInput").value = "";
+        document.getElementById("urlInput").value = "";
+        loadLinks();
+      } catch (error) {
+        console.error("Error saving link:", error);
+        alert("Failed to save link. See console.");
+      }
+    }
+
+    window.deleteLink = async function (linkId) {
+      if (!confirm("Are you sure you want to delete this link?")) return;
+      try {
+        await deleteDoc(doc(db, "subjects", subject, "links", linkId));
+        loadLinks();
+      } catch (error) {
+        console.error("Error deleting link:", error);
+        alert("Failed to delete link. See console.");
+      }
+    };
+
+    window.editLink = async function (linkId, currentTitle, currentUrl) {
+      const newTitle = prompt("Edit Title:", currentTitle);
+      if (newTitle === null) return;
+      const newUrl = prompt("Edit URL:", currentUrl);
+      if (newUrl === null) return;
+
+      if (!newUrl.trim()) {
+        alert("URL cannot be empty");
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, "subjects", subject, "links", linkId), {
+          title: newTitle.trim(),
+          url: newUrl.trim(),
+        });
+        loadLinks();
+      } catch (error) {
+        console.error("Error updating link:", error);
+        alert("Failed to update link. See console.");
+      }
+    };
+
+    window.saveLink = saveLink;
+    window.onload = loadLinks;
+  </script>
+</body>
+</html>

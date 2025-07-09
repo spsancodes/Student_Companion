@@ -19,7 +19,7 @@
 body {
   background: var(--bg-primary);
   min-height: 100vh;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: var(--text-primary);
 }
 
@@ -64,7 +64,7 @@ body {
   font-size: 2rem;
   font-weight: bold;
   color: var(--primary-color);
-  font-family: "Courier New", monospace;
+  font-family: 'Courier New', monospace;
 }
 
 .progress-ring {
@@ -86,13 +86,8 @@ body {
 }
 
 @keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }
 
 /* Analytics Styles */
@@ -261,9 +256,7 @@ body {
 }
 
 @keyframes slideIn {
-  to {
-    transform: translateX(0);
-  }
+  to { transform: translateX(0); }
 }
 
 .notification.slide-out {
@@ -271,9 +264,7 @@ body {
 }
 
 @keyframes slideOut {
-  to {
-    transform: translateX(100%);
-  }
+  to { transform: translateX(100%); }
 }
 
 .notification-success {
@@ -336,29 +327,25 @@ body {
   border-top-color: var(--border-color);
 }
 
-.modal-backdrop {
-  background-color: rgba(0, 0, 0, 0.5);
-}
-
 /* Responsive Design */
 @media (max-width: 768px) {
   .timer-display {
     font-size: 1.5rem;
   }
-
+  
   .stat-number {
     font-size: 1.5rem;
   }
-
+  
   .chart-container {
     height: 250px;
   }
-
+  
   .analytics-controls {
     flex-direction: column;
     width: 100%;
   }
-
+  
   .analytics-controls .btn {
     width: 100%;
     margin-bottom: 0.25rem;
@@ -377,9 +364,7 @@ body {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 /* Smooth Transitions */

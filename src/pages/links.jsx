@@ -1,12 +1,14 @@
+// src/pages/Links.jsx
 import React from 'react';
 
-const Links = () => {
+export default function Links() {
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-semibold">Your Saved Links</h1>
-      {/* Your UI goes here */}
+    <div className="p-4 h-screen">
+      <iframe
+        src="/links/index.html"
+        title="Link Saver"
+        className="w-full h-full rounded-xl shadow-md border-2 border-blue-400"
+      />
     </div>
   );
-};
-
-export default Links;
+}
