@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Link } from 'react-router-dom'; // 👈 make sure this is imported
+import { Link, useNavigate } from 'react-router-dom'; // 👈 Add useNavigate
 
-const Login = ({ onLogin }) => {
+const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const navigate = useNavigate(); // 👈 initialize navigator
 
   const handleLogin = async () => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -35,9 +36,13 @@ const Login = ({ onLogin }) => {
       return;
     }
 
-    onLogin(data.user, profile.role);
-  };
-
+    // ✅ Navigate based on role
+    if (profile.role === 'admin') {
+  navigate('/admin-dashboard');
+} else {
+  navigate('/dashboard', { state: { role: profile.role } });
+}
+  }
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white shadow-md rounded-xl p-8 w-full max-w-md">
@@ -67,7 +72,7 @@ const Login = ({ onLogin }) => {
           Login
         </button>
 
-        {/* 👇 Add Signup Redirect Here */}
+        {/* 👇 Signup Redirect */}
         <p className="text-sm text-center mt-6 text-gray-600">
           Don’t have an account?{' '}
           <Link to="/signup" className="text-blue-600 hover:underline">

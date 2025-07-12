@@ -1,19 +1,5 @@
 /* CSS Variables for theming */
 /* OPTION 1: SANDAL & WARM EARTH TONES */
-:root {
-  --bg-primary: linear-gradient(135deg, #f4e4bc 0%, #d4a574 50%, #c19a6b 100%);
-  --bg-secondary: #f4e4bc;
-  --primary-color: #8b6914;
-  --secondary-color: #d4a574;
-  --accent-color: #a0522d;
-  --text-primary: #3e2723;
-  --text-secondary: #5d4037;
-  --border-color: #d4a574;
-  --shadow-sm: 0 2px 4px rgba(139, 105, 20, 0.1);
-  --shadow-md: 0 4px 8px rgba(139, 105, 20, 0.15);
-  --shadow-lg: 0 8px 16px rgba(139, 105, 20, 0.2);
-  --scheme-name: "Sandal Earth";
-}
 
 /* Global Styles */
 body {

@@ -107,7 +107,14 @@ const Calendar = ({ role }) => {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('calendar_events').select('*');
+      const { data: { user } } = await supabase.auth.getUser();
+const currentUserId = user?.id;
+
+const { data, error } = await supabase
+  .from('calendar_events')
+  .select('*')
+  .or(`is_public.eq.true,user_id.eq.${currentUserId}`);
+
       if (error) throw error;
 
      
@@ -147,10 +154,12 @@ const Calendar = ({ role }) => {
 
     // Add the user ID to the event data
     const eventWithUser = {
-      ...newEvent,
-      created_by: user.id,
-      // Assuming this should be true for academic events
-    };
+  ...newEvent,
+  created_by: user.id,
+  is_public: newEvent.is_personal ? false : true,
+  user_id: newEvent.is_personal ? user.id : null,
+};
+
 
     const { data: insertedEvent, error } = await supabase
   .from('calendar_events')
@@ -161,7 +170,7 @@ const Calendar = ({ role }) => {
 if (error) throw error;
 
 // ✅ Now schedule reminders
-const reminderOffsets = insertedEvent.custom_reminder_offsets ?? [5, 2, 0.0333]; // default values in hours
+  const reminderOffsets = insertedEvent.custom_reminder_offsets ?? [5, 2, 0.0333]; // default values in hours
 const dueTime = new Date(`${insertedEvent.date}T${insertedEvent.start_time}`);
 
 const { data: students, error: studentError } = await supabase
@@ -182,14 +191,23 @@ for (const student of students) {
       title: `⏰ Reminder: ${insertedEvent.title}`,
       body: `Due in ${offset >= 1 ? offset + ' hours' : Math.round(offset * 60) + ' minutes'}`,
       send_at: sendAt.toISOString(),
+      sent: false,
+      created_at: new Date().toISOString(), // ✅ Important!
     });
   }
 }
 
 await supabase.from("notifications").insert(notifications);
 
+    // Insert notifications in batches if there are many
+    const { error: notificationError } = await supabase
+      .from("notifications")
+      .insert(notifications);
+
+    if (notificationError) throw notificationError;
+
     setShowForm(false);
-    fetchEvents(); // Refresh the events list
+    fetchEvents();
   } catch (err) {
     console.error('Error saving event:', err);
     alert('Failed to save event: ' + err.message);
@@ -273,7 +291,8 @@ const handleDeleteEvent = async (eventId) => {
   };
 
   const eventStyleGetter = (event) => {
-    const color = event.isAcademic ? '#4ade80' : '#fb923c';
+    const color = event.is_personal ? '#60a5fa' : (event.isAcademic ? '#4ade80' : '#fb923c');
+
     const bg = event.isAcademic ? '#f0fdf4' : '#fff7ed';
     return {
       style: {
@@ -309,9 +328,13 @@ const handleDeleteEvent = async (eventId) => {
             </div>
             <div className="flex items-center text-sm">
               <span className="w-3 h-3 rounded-full bg-green-400 mr-1"></span>
-              <span className="text-white mr-3">Academic</span>
+              
               <span className="w-3 h-3 rounded-full bg-orange-400 mr-1"></span>
-              <span className="text-white">General</span>
+              
+              <span className="w-3 h-3 rounded-full bg-green-400 mr-1"></span> Academic
+<span className="w-3 h-3 rounded-full bg-orange-400 mr-1"></span> General
+<span className="w-3 h-3 rounded-full bg-blue-400 mr-1"></span> Personal
+
             </div>
           </div>
         </div>

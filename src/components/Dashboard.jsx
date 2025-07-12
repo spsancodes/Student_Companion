@@ -34,7 +34,18 @@ const [showNotifications, setShowNotifications] = useState(false);
     { label: '🗓️ Academic Calendar', path: '/calendar' },
   ];
 
-  const options = role === 'authority' ? teacherOptions : studentOptions;
+  let options = [];
+
+if (role === 'admin') {
+  // Optionally: Redirect to /admin-dashboard if you want to use a different component
+  navigate('/admin-dashboard'); // 🔁 Or handle here directly
+  return null;
+} else if (role === 'authority') {
+  options = teacherOptions;
+} else {
+  options = studentOptions;
+}
+
 
 
  useEffect(() => {

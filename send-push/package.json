@@ -1,0 +1,22 @@
+{
+  "name": "send-push",
+  "version": "1.0.0",
+  "main": "sendNotification.js",
+  "scripts": {
+    
+   "dev": "concurrently \"vite\" \"npm run notify:watch\"",
+  "notify": "node runNotifier.js",               
+  "notify:watch": "nodemon runNotifier.js"  
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^17.2.0",
+    "firebase-admin": "^13.4.0",
+    "node-cron": "^4.2.1",
+    "concurrently": "^8.2.0"
+  }
+}

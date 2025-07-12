@@ -1,145 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Link Saver - Home</title>
-  <style>
-    /* Base reset */
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      background-color: #f9fafb;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      color: #333;
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-    }
-    h1 {
-      font-size: 2.5rem;
-      font-weight: 700;
-      margin-bottom: 30px;
-      color: #2c3e50;
-      text-align: center;
-      user-select: none;
-    }
-    .input-container {
-      display: flex;
-      align-items: center;
-      margin-bottom: 20px;
-      width: 100%;
-      max-width: 400px;
-    }
-    input[type="text"] {
-      flex-grow: 1;
-      padding: 12px 15px;
-      font-size: 1.1rem;
-      border: 1.5px solid #ccc;
-      border-radius: 8px;
-      transition: border-color 0.3s ease;
-    }
-    input[type="text"]:focus {
-      border-color: #3498db;
-      outline: none;
-      box-shadow: 0 0 8px rgba(52, 152, 219, 0.4);
-    }
-    button {
-      padding: 12px 25px;
-      margin-left: 15px;
-      font-size: 1.1rem;
-      background-color: #3498db;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease;
-      user-select: none;
-    }
-    button:hover {
-      background-color: #2980b9;
-      box-shadow: 0 4px 15px rgba(41, 128, 185, 0.6);
-    }
-    #historyContainer {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      max-width: 400px;
-      width: 100%;
-    }
-    .history-box {
-      background-color: #3498db;
-      color: white;
-      padding: 8px 14px;
-      border-radius: 20px;
-      font-weight: 600;
-      cursor: pointer;
-      user-select: none;
-      box-shadow: 0 2px 8px rgba(52, 152, 219, 0.5);
-      transition: background-color 0.3s;
-    }
-    .history-box:hover {
-      background-color: #2980b9;
-    }
-    /* Responsive */
-    @media (max-width: 400px) {
-      .input-container {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      input[type="text"] {
-        margin-bottom: 10px;
-        width: 100%;
-      }
-      button {
-        margin-left: 0;
-        width: 100%;
-      }
-      #historyContainer {
-        max-width: 100%;
-      }
-    }
-  </style>
-</head>
-<body>
-  <h1>Welcome to Link Saver</h1>
-  <div class="input-container">
-    <input type="text" id="subjectInput" placeholder="Enter subject name" />
-    <button onclick="saveSubject()">Go</button>
-  </div>
+  <script type="module">
+    import { db } from './firebase-config.js';
+    import { setDoc, doc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
-  <div id="historyContainer"></div>
-
-  <script>
-    const historyKey = 'subjectHistory';
-
-    // Load and display history from localStorage
-    function loadHistory() {
-      const historyContainer = document.getElementById('historyContainer');
-      historyContainer.innerHTML = ''; // Clear old
-
-      const subjects = JSON.parse(localStorage.getItem(historyKey)) || [];
-
-      subjects.forEach(subject => {
-        const box = document.createElement('div');
-        box.className = 'history-box';
-        box.textContent = subject;
-        box.title = "Click to select this subject";
-        box.onclick = () => {
-          localStorage.setItem('selectedSubject', subject);
-          window.location.href = "subject.html";
-        };
-        historyContainer.appendChild(box);
-      });
-    }
-
-    // Save subject entered and redirect
-    function saveSubject() {
+    window.saveSubject = async function () {
       const input = document.getElementById('subjectInput');
       const subject = input.value.trim();
       if (!subject) {
@@ -147,23 +15,20 @@
         return;
       }
 
-      let subjects = JSON.parse(localStorage.getItem(historyKey)) || [];
-
-      // Avoid duplicates (case-insensitive)
-      if (!subjects.some(s => s.toLowerCase() === subject.toLowerCase())) {
-        subjects.unshift(subject); // Add new subject at start
-        // Keep max 10 history items
-        if (subjects.length > 10) subjects.pop();
-        localStorage.setItem(historyKey, JSON.stringify(subjects));
-      }
-
-      // Save selected subject and redirect
       localStorage.setItem('selectedSubject', subject);
-      window.location.href = "subject.html";
-    }
-
-    // Load history when page loads
-    window.onload = loadHistory;
+      try {
+        await setDoc(doc(db, "subjects", subject.toLowerCase()), { name: subject });
+        window.location.href = "subject.html";
+      } catch (e) {
+        alert("Error saving subject to database.");
+        console.error(e);
+      }
+    };
   </script>
+</head>
+<body>
+  <h1>Welcome to Link Saver</h1>
+  <input type="text" id="subjectInput" placeholder="Enter subject name">
+  <button onclick="saveSubject()">Go</button>
 </body>
 </html>
