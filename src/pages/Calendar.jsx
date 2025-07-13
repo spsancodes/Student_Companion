@@ -180,19 +180,40 @@ const { data: students, error: studentError } = await supabase
 
 if (studentError) throw studentError;
 
+// ✅ Convert IST to UTC properly
+function toUTC(dateStr, timeStr) {
+  // Append +05:30 to treat input as IST
+  return new Date(`${dateStr}T${timeStr}+05:30`);
+}
+
+const dueTimeUTC = toUTC(insertedEvent.date, insertedEvent.start_time);
+
 const notifications = [];
 
 for (const student of students) {
   for (const offset of reminderOffsets) {
-    const sendAt = new Date(dueTime.getTime() - offset * 60 * 60 * 1000);
+    const sendAt = new Date(dueTimeUTC.getTime() - offset * 60 * 60 * 1000);
+
+    // Format time difference nicely
+    const roundedOffset = Math.round(offset * 100) / 100; // round to 2 decimals
+    let timePhrase = "";
+
+    if (roundedOffset >= 1) {
+      const hr = Math.floor(roundedOffset);
+      timePhrase = `${hr} hour${hr === 1 ? '' : 's'}`;
+    } else {
+      const mins = Math.round(roundedOffset * 60);
+      timePhrase = `${mins} minute${mins === 1 ? '' : 's'}`;
+    }
+
     notifications.push({
       user_id: student.id,
       event_id: insertedEvent.id,
       title: `⏰ Reminder: ${insertedEvent.title}`,
-      body: `Due in ${offset >= 1 ? offset + ' hours' : Math.round(offset * 60) + ' minutes'}`,
-      send_at: sendAt.toISOString(),
+      body: `Due in ${timePhrase}`,
+      send_at: sendAt.toISOString(), // Stored in UTC
       sent: false,
-      created_at: new Date().toISOString(), // ✅ Important!
+      created_at: new Date().toISOString(), // Also in UTC
     });
   }
 }
