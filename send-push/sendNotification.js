@@ -35,29 +35,32 @@ export async function sendPendingNotifications() {
   const now = new Date().toISOString();
   console.log("🕒 Current ISO timestamp:", now);
 
+  // ⬇️ Move debug here inside the function
+  const debugDump = await supabase
+    .from('notifications')
+    .select('*');
+
+  console.log("🧾 DEBUG: All notifications (no filters):", debugDump);
+
   // ✅ JOIN profiles to get device_token for each user
   const { data: notifications, error } = await supabase
-  .from('notifications')
-  .select(`
-    id,
-    user_id,
-    event_id,
-    title,
-    body,
-    send_at,
-    sent,
-    profiles:profiles (
-      device_token
-    )
-  `)
-  .eq('sent', false)
-  .lte('send_at', now);
+    .from('notifications')
+    .select(`
+      id,
+      user_id,
+      event_id,
+      title,
+      body,
+      send_at,
+      sent,
+      profiles:profiles (
+        device_token
+      )
+    `)
+    .eq('sent', false)
+    .lte('send_at', now);
 
-    console.log("Supabase connection test:", { notifications, error });
-
-
-  console.log("🧪 Raw notifications result:", notifications);
-  
+  console.log("📦 Supabase filtered notifications:", { notifications, error });
 
   if (error) {
     console.error('❌ Error fetching notifications:', error.message);
@@ -71,7 +74,6 @@ export async function sendPendingNotifications() {
 
   for (const notification of notifications) {
     const { id, title, body, send_at, profiles } = notification;
-
     console.log(`📨 Processing notification ID ${id} scheduled for ${send_at}`);
 
     const token = profiles?.device_token;
@@ -104,9 +106,9 @@ export async function sendPendingNotifications() {
           sent_at: new Date().toISOString(),
         })
         .eq('id', id);
-
     } catch (err) {
       console.error(`❌ Failed to send notification ID ${id}:`, err.message);
     }
   }
 }
+

@@ -197,15 +197,11 @@ for (const student of students) {
   }
 }
 
-await supabase.from("notifications").insert(notifications);
+const { error: notificationError } = await supabase
+  .from("notifications")
+  .insert(notifications);
 
-    // Insert notifications in batches if there are many
-    const { error: notificationError } = await supabase
-      .from("notifications")
-      .insert(notifications);
-
-    if (notificationError) throw notificationError;
-
+if (notificationError) throw notificationError;
     setShowForm(false);
     fetchEvents();
   } catch (err) {
