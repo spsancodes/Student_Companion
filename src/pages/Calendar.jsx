@@ -5,7 +5,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { supabase } from '../supabaseClient';
 import { FaCalendarAlt, FaChevronLeft, FaChevronRight, FaTimes } from 'react-icons/fa';
 import { FiCalendar, FiBook, FiAward, FiSun } from 'react-icons/fi';
-import EventForm from '../components/EventForm'; // Adjust path if needed
+import EventForm from '../components/EventForm';
 import { showInstantNotification } from "../utils/notify";
 
 const localizer = momentLocalizer(moment);
@@ -34,25 +34,44 @@ const Calendar = ({ role }) => {
           },
           (payload) => {
             const newEvent = payload.new;
-
             if (newEvent.created_by !== currentUserId) {
-              showInstantNotification(
-                "📅 New Calendar Event",
-                `"${newEvent.title}" was just added.`
-              );
+              // Don't show notification immediately - they'll come through the notifications table
             }
           }
         )
         .subscribe();
+
+      // Subscribe to notifications table for actual reminders
+      const notificationChannel = supabase
+        .channel("user-notifications")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${currentUserId}`,
+          },
+          (payload) => {
+            const notification = payload.new;
+            const now = new Date();
+            const sendAt = new Date(notification.send_at);
+            
+            // Only show if it's time (or slightly overdue)
+            if (sendAt <= now) {
+              showInstantNotification(notification.title, notification.body);
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel("calendar-events-channel");
+        supabase.removeChannel("user-notifications");
+      };
     };
 
     setupNotificationSubscription();
-
-    
-
-    return () => {
-      supabase.removeChannel("calendar-events-channel");
-    };
   }, []);
 
   const CustomToolbar = (toolbar) => {
@@ -144,92 +163,78 @@ const { data, error } = await supabase
   }, []);
 
  const handleSaveEvent = async (newEvent) => {
-  try {
-    // Get the current authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    console.log("Logged in user:", user);
-    
-    if (authError) throw authError;
-    if (!user) throw new Error('No authenticated user');
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error('No authenticated user');
 
-    // Add the user ID to the event data
-    const eventWithUser = {
-  ...newEvent,
-  created_by: user.id,
-  is_public: newEvent.is_personal ? false : true,
-  user_id: newEvent.is_personal ? user.id : null,
-};
+      const eventWithUser = {
+        ...newEvent,
+        created_by: user.id,
+        is_public: newEvent.is_personal ? false : true,
+        user_id: newEvent.is_personal ? user.id : null,
+      };
 
+      const { data: insertedEvent, error } = await supabase
+        .from('calendar_events')
+        .insert([eventWithUser])
+        .select()
+        .single();
 
-    const { data: insertedEvent, error } = await supabase
-  .from('calendar_events')
-  .insert([eventWithUser])
-  .select()
-  .single();
+      if (error) throw error;
 
-if (error) throw error;
+      // Schedule reminders
+      const reminderOffsets = insertedEvent.custom_reminder_offsets ?? [5, 2, 0.0333]; // default values in hours
+      const dueTimeUTC = new Date(`${insertedEvent.date}T${insertedEvent.start_time}Z`);
 
-// ✅ Now schedule reminders
-  const reminderOffsets = insertedEvent.custom_reminder_offsets ?? [5, 2, 0.0333]; // default values in hours
-const dueTime = new Date(`${insertedEvent.date}T${insertedEvent.start_time}`);
+      const { data: students, error: studentError } = await supabase
+        .from("profiles")
+        .select("id")
+        .neq("role", "authority");
 
-const { data: students, error: studentError } = await supabase
-  .from("profiles")
-  .select("id")
-  .neq("role", "authority");
+      if (studentError) throw studentError;
 
-if (studentError) throw studentError;
+      const notifications = [];
 
-// ✅ Convert IST to UTC properly
-function toUTC(dateStr, timeStr) {
-  // Append +05:30 to treat input as IST
-  return new Date(`${dateStr}T${timeStr}+05:30`);
-}
+      for (const student of students) {
+        for (const offset of reminderOffsets) {
+          const sendAt = new Date(dueTimeUTC.getTime() - offset * 60 * 60 * 1000);
+          const roundedOffset = Math.round(offset * 100) / 100;
+          let timePhrase = "";
 
-const dueTimeUTC = toUTC(insertedEvent.date, insertedEvent.start_time);
+          if (roundedOffset >= 1) {
+            const hr = Math.floor(roundedOffset);
+            timePhrase = `${hr} hour${hr === 1 ? '' : 's'}`;
+          } else {
+            const mins = Math.round(roundedOffset * 60);
+            timePhrase = `${mins} minute${mins === 1 ? '' : 's'}`;
+          }
 
-const notifications = [];
+          notifications.push({
+            user_id: student.id,
+            event_id: insertedEvent.id,
+            title: `⏰ Reminder: ${insertedEvent.title}`,
+            body: `Due in ${timePhrase}`,
+            send_at: sendAt.toISOString(),
+            sent: false,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
 
-for (const student of students) {
-  for (const offset of reminderOffsets) {
-    const sendAt = new Date(dueTimeUTC.getTime() - offset * 60 * 60 * 1000);
+      const { error: notificationError } = await supabase
+        .from("notifications")
+        .insert(notifications);
 
-    // Format time difference nicely
-    const roundedOffset = Math.round(offset * 100) / 100; // round to 2 decimals
-    let timePhrase = "";
+      if (notificationError) throw notificationError;
 
-    if (roundedOffset >= 1) {
-      const hr = Math.floor(roundedOffset);
-      timePhrase = `${hr} hour${hr === 1 ? '' : 's'}`;
-    } else {
-      const mins = Math.round(roundedOffset * 60);
-      timePhrase = `${mins} minute${mins === 1 ? '' : 's'}`;
+      setShowForm(false);
+      fetchEvents();
+    } catch (err) {
+      console.error('Error saving event:', err);
+      alert('Failed to save event: ' + err.message);
     }
-
-    notifications.push({
-      user_id: student.id,
-      event_id: insertedEvent.id,
-      title: `⏰ Reminder: ${insertedEvent.title}`,
-      body: `Due in ${timePhrase}`,
-      send_at: sendAt.toISOString(), // Stored in UTC
-      sent: false,
-      created_at: new Date().toISOString(), // Also in UTC
-    });
-  }
-}
-
-const { error: notificationError } = await supabase
-  .from("notifications")
-  .insert(notifications);
-
-if (notificationError) throw notificationError;
-    setShowForm(false);
-    fetchEvents();
-  } catch (err) {
-    console.error('Error saving event:', err);
-    alert('Failed to save event: ' + err.message);
-  }
-};
+  };
 
 const handleUpdateEvent = async (updatedEvent) => {
   try {
