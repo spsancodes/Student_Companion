@@ -42,28 +42,41 @@ const Calendar = ({ role }) => {
         .subscribe();
 
       // Subscribe to notifications table for actual reminders
-      const notificationChannel = supabase
-        .channel("user-notifications")
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${currentUserId}`,
-          },
-          (payload) => {
-            const notification = payload.new;
-            const now = new Date();
-            const sendAt = new Date(notification.send_at);
-            
-            // Only show if it's time (or slightly overdue)
-            if (sendAt <= now) {
-              showInstantNotification(notification.title, notification.body);
-            }
-          }
-        )
-        .subscribe();
+   const notificationChannel = supabase
+  .channel("user-notifications")
+  .on(
+    "postgres_changes",
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "notifications",
+      filter: `user_id=eq.${currentUserId}`,
+    },
+    async (payload) => {
+      const notification = payload.new;
+      const now = new Date();
+      const sendAt = new Date(notification.send_at);
+
+      const timeDiff = Math.abs(now - sendAt);
+
+      if (sendAt <= now && timeDiff < 60000) {
+        // ✅ 1. Show the notification
+        showInstantNotification(notification.title, notification.body);
+
+        // ✅ 2. Mark it as sent
+        const { error } = await supabase
+          .from("notifications")
+          .update({ sent: true })
+          .eq("id", notification.id);
+
+        if (error) {
+          console.error("❌ Failed to mark notification as sent:", error.message);
+        }
+      }
+    }
+  )
+  .subscribe();
+
 
       return () => {
         supabase.removeChannel("calendar-events-channel");
