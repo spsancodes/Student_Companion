@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Academic Companion</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="pomo_style.css">
+    <link rel="stylesheet" href="pomo_style_dup.css">
 </head>
 <body>
+<body class="light-theme">  <!-- for light mode -->
+<body class="dark-theme">   <!-- for dark mode -->
     <div class="container-fluid py-4">
         <div class="row">
             <!-- Pomodoro Timer Section -->
@@ -58,7 +60,7 @@
                         </div>
 
                         <!-- Status Display -->
-                        <div class="mt-3 p-2 rounded" style="background-color: var(--bg-secondary);">
+                        <div class="mt-3 p-2 rounded" style="background-color: var(--bg-secondary) ;">
                             <small id="pomodoroStatus" class="text-muted">Ready to focus! Click Start to begin.</small>
                         </div>
                     </div>
@@ -75,6 +77,9 @@
                             <button onclick="exportProgress()" class="btn btn-outline-primary btn-sm">📊 Export</button>
                             <button onclick="resetProgress()" class="btn btn-outline-primary btn-sm">🔄 Reset</button>
                         </div>
+			<div class="text-end mb-3">
+  				<button class="btn btn-outline-primary" onclick="toggleTheme()">🌓 Toggle Theme</button>
+			</div>
                     </div>
                     <div class="card-body">
                         <!-- Stats Summary -->

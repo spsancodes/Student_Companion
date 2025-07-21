@@ -4,7 +4,8 @@ const AppState = {
     timeLeft: 25 * 60, // 25 minutes in seconds
     totalTime: 25 * 60,
     isRunning: false,
-    isPaused: false
+    isPaused: false,
+    startTime: null // Track when timer started for persistence
   },
   sessions: [], // Keep for analytics data
   charts: {
@@ -13,7 +14,7 @@ const AppState = {
     weeklyTrendChart: null
   },
   sounds: {
-    complete: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDaH0fPTgjMGH3DU8+GWRwsTYrvn5Z9NEQ1SqeT5tWMaBjmJ0fLKeSoFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDaH0fPTgjMGH3DU8+GWRwsTYrvn5Z9NEQ1SqeT5tWMaBjmJ0fLKeSoFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDaH0fPTgjMGH3DU8+GWRwsTYrvn5Z9NEQ1SqeT5'),
+    complete: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDaH0fPTgjMGH3DU8+GWRwsTYrvn5Z9NEQ1SqeT5tWMaBjmJ0fLKeSoFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDaH0fPTgjMGH3DU8+GWRwsTYrvn5Z9NEQ1SqeT5'),
     tick: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDaH0fPTgjMGH3DU8+GWRwsTYrvn5Z9NEQ1SqeT5tWMaBjmJ0fLKeSoFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBDaH0fPTgjMGH3DU8+GWRwsTYrvn5Z9NEQ1SqeT5')
   }
 };
@@ -44,12 +45,17 @@ function saveData() {
       sessions: AppState.sessions,
       timer: {
         timeLeft: AppState.timer.timeLeft,
-        totalTime: AppState.timer.totalTime
-      }
+        totalTime: AppState.timer.totalTime,
+        isRunning: AppState.timer.isRunning,
+        isPaused: AppState.timer.isPaused,
+        startTime: AppState.timer.startTime
+      },
+      lastSaved: new Date().toISOString()
     };
-    // Note: In Claude.ai artifacts, we'll store in memory only
-    // localStorage would be used in a real environment
-    console.log('Data saved to memory:', dataToSave);
+    
+    // Save to localStorage
+    localStorage.setItem('pomodoroAppData', JSON.stringify(dataToSave));
+    console.log('Data saved to localStorage');
   } catch (error) {
     console.error('Error saving data:', error);
   }
@@ -57,9 +63,39 @@ function saveData() {
 
 function loadData() {
   try {
-    // In a real environment, this would load from localStorage
-    // For now, we'll start with empty data
-    console.log('Data loaded from memory');
+    const savedData = localStorage.getItem('pomodoroAppData');
+    if (savedData) {
+      const data = JSON.parse(savedData);
+      
+      // Restore sessions
+      AppState.sessions = data.sessions || [];
+      
+      // Restore timer state
+      if (data.timer) {
+        AppState.timer.timeLeft = data.timer.timeLeft || 25 * 60;
+        AppState.timer.totalTime = data.timer.totalTime || 25 * 60;
+        AppState.timer.isRunning = data.timer.isRunning || false;
+        AppState.timer.isPaused = data.timer.isPaused || false;
+        AppState.timer.startTime = data.timer.startTime;
+        
+        // If timer was running when page was closed, calculate elapsed time
+        if (AppState.timer.isRunning && AppState.timer.startTime) {
+          const now = new Date().getTime();
+          const startTime = new Date(AppState.timer.startTime).getTime();
+          const elapsedSeconds = Math.floor((now - startTime) / 1000);
+          
+          AppState.timer.timeLeft = Math.max(0, AppState.timer.timeLeft - elapsedSeconds);
+          
+          // If time ran out while away, complete the session
+          if (AppState.timer.timeLeft <= 0) {
+            completePomodoro();
+            return;
+          }
+        }
+      }
+      
+      console.log('Data loaded from localStorage');
+    }
   } catch (error) {
     console.error('Error loading data:', error);
   }
@@ -72,7 +108,7 @@ function showNotification(message, type = 'info', duration = 3000) {
   
   notification.className = `notification notification-${type}`;
   notification.innerHTML = `
-    <div style="display: flex; justify-content: between; align-items: center;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
       <span>${message}</span>
       <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: inherit; font-size: 1.2rem; cursor: pointer; margin-left: 10px;">&times;</button>
     </div>
@@ -129,12 +165,16 @@ function togglePomodoro() {
 function startPomodoro() {
   AppState.timer.isRunning = true;
   AppState.timer.isPaused = false;
+  AppState.timer.startTime = new Date().toISOString();
   
   const btn = document.getElementById('pomodoroBtn');
   btn.innerHTML = '⏸️ Pause';
   btn.className = 'btn btn-warning';
   
   updatePomodoroStatus('Focus time! Stay concentrated and avoid distractions.');
+  
+  // Save immediately when starting
+  saveData();
   
   timerInterval = setInterval(() => {
     AppState.timer.timeLeft--;
@@ -150,6 +190,7 @@ function startPomodoro() {
 function pausePomodoro() {
   AppState.timer.isRunning = false;
   AppState.timer.isPaused = true;
+  AppState.timer.startTime = null;
   
   clearInterval(timerInterval);
   
@@ -158,12 +199,16 @@ function pausePomodoro() {
   btn.className = 'btn btn-success';
   
   updatePomodoroStatus('Timer paused. Click Resume when ready to continue.');
+  
+  // Save when pausing
+  saveData();
 }
 
 function resetPomodoro() {
   AppState.timer.isRunning = false;
   AppState.timer.isPaused = false;
   AppState.timer.timeLeft = AppState.timer.totalTime;
+  AppState.timer.startTime = null;
   
   clearInterval(timerInterval);
   
@@ -174,6 +219,9 @@ function resetPomodoro() {
   updateTimerDisplay();
   updateProgressRing();
   updatePomodoroStatus('Ready to focus! Click Start to begin.');
+  
+  // Save when resetting
+  saveData();
 }
 
 function completePomodoro() {
@@ -181,6 +229,7 @@ function completePomodoro() {
   
   AppState.timer.isRunning = false;
   AppState.timer.isPaused = false;
+  AppState.timer.startTime = null;
   
   // Add session data for analytics
   AppState.sessions.push({
@@ -242,6 +291,9 @@ function setTimer(minutes) {
   updatePomodoroStatus(`Timer set to ${minutes} minutes. Ready to start!`);
   
   showNotification(`Timer set to ${minutes} minutes`, 'info');
+  
+  // Save when setting new timer
+  saveData();
 }
 
 function setCustomTimer() {
@@ -258,6 +310,8 @@ function setCustomTimer() {
 
 function updateTimerDisplay() {
   const display = document.getElementById('timerDisplay');
+  if (!display) return;
+  
   const minutes = Math.floor(AppState.timer.timeLeft / 60);
   const seconds = AppState.timer.timeLeft % 60;
   
@@ -273,6 +327,8 @@ function updateTimerDisplay() {
 
 function updateProgressRing() {
   const circle = document.getElementById('progressCircle');
+  if (!circle) return;
+  
   const radius = 60;
   const circumference = 2 * Math.PI * radius;
   
@@ -283,20 +339,30 @@ function updateProgressRing() {
 }
 
 function updatePomodoroStatus(message) {
-  document.getElementById('pomodoroStatus').textContent = message;
+  const statusElement = document.getElementById('pomodoroStatus');
+  if (statusElement) {
+    statusElement.textContent = message;
+  }
 }
 
 // ===== ANALYTICS & CHARTS =====
 function initializeCharts() {
+  // Wait for Chart.js to be available
+  if (typeof Chart === 'undefined') {
+    setTimeout(initializeCharts, 100);
+    return;
+  }
+  
   initializeProgressChart();
   initializeDistributionChart();
   initializeWeeklyTrendChart();
 }
 
 function initializeProgressChart() {
-  const ctx = document.getElementById('progressChart').getContext('2d');
+  const ctx = document.getElementById('progressChart');
+  if (!ctx) return;
   
-  AppState.charts.progressChart = new Chart(ctx, {
+  AppState.charts.progressChart = new Chart(ctx.getContext('2d'), {
     type: 'line',
     data: {
       labels: [],
@@ -347,9 +413,10 @@ function initializeProgressChart() {
 }
 
 function initializeDistributionChart() {
-  const ctx = document.getElementById('distributionChart').getContext('2d');
+  const ctx = document.getElementById('distributionChart');
+  if (!ctx) return;
   
-  AppState.charts.distributionChart = new Chart(ctx, {
+  AppState.charts.distributionChart = new Chart(ctx.getContext('2d'), {
     type: 'doughnut',
     data: {
       labels: ['15-min Sessions', '25-min Sessions', '30-min Sessions', '45+ min Sessions'],
@@ -386,9 +453,10 @@ function initializeDistributionChart() {
 }
 
 function initializeWeeklyTrendChart() {
-  const ctx = document.getElementById('weeklyTrendChart').getContext('2d');
+  const ctx = document.getElementById('weeklyTrendChart');
+  if (!ctx) return;
   
-  AppState.charts.weeklyTrendChart = new Chart(ctx, {
+  AppState.charts.weeklyTrendChart = new Chart(ctx.getContext('2d'), {
     type: 'bar',
     data: {
       labels: [],
@@ -430,12 +498,12 @@ function initializeWeeklyTrendChart() {
     }
   });
 }
-
 function updateCharts() {
   updateProgressChart();
   updateDistributionChart();
   updateWeeklyTrendChart();
 }
+
 
 function updateProgressChart() {
   if (!AppState.charts.progressChart) return;
@@ -531,40 +599,51 @@ function updateStats() {
 }
 
 function updateTotalSessions() {
-  const total = AppState.sessions.length;
-  document.getElementById('totalSessions').textContent = total;
+  const element = document.getElementById('totalSessions');
+  if (element) {
+    element.textContent = AppState.sessions.length;
+  }
 }
 
 function updateTotalFocusTime() {
-  const totalMinutes = AppState.sessions.reduce((total, session) => {
-    return total + (session.duration || 0);
-  }, 0);
-  
-  const hours = (totalMinutes / 60).toFixed(1);
-  document.getElementById('totalFocusTime').textContent = hours;
+  const element = document.getElementById('totalFocusTime');
+  if (element) {
+    const totalMinutes = AppState.sessions.reduce((total, session) => {
+      return total + (session.duration || 0);
+    }, 0);
+    
+    const hours = (totalMinutes / 60).toFixed(1);
+    element.textContent = hours;
+  }
 }
 
 function updateAverageSession() {
-  if (AppState.sessions.length === 0) {
-    document.getElementById('averageSession').textContent = '0';
-    return;
+  const element = document.getElementById('averageSession');
+  if (element) {
+    if (AppState.sessions.length === 0) {
+      element.textContent = '0';
+      return;
+    }
+    
+    const totalMinutes = AppState.sessions.reduce((total, session) => {
+      return total + (session.duration || 0);
+    }, 0);
+    
+    const average = Math.round(totalMinutes / AppState.sessions.length);
+    element.textContent = average;
   }
-  
-  const totalMinutes = AppState.sessions.reduce((total, session) => {
-    return total + (session.duration || 0);
-  }, 0);
-  
-  const average = Math.round(totalMinutes / AppState.sessions.length);
-  document.getElementById('averageSession').textContent = average;
 }
 
 function updateTodayFocus() {
-  const today = new Date().toISOString().split('T')[0];
-  const todayMinutes = AppState.sessions
-    .filter(s => s.completedAt && s.completedAt.startsWith(today))
-    .reduce((total, session) => total + (session.duration || 0), 0);
-  
-  document.getElementById('todayFocus').textContent = todayMinutes;
+  const element = document.getElementById('todayFocus');
+  if (element) {
+    const today = new Date().toISOString().split('T')[0];
+    const todayMinutes = AppState.sessions
+      .filter(s => s.completedAt && s.completedAt.startsWith(today))
+      .reduce((total, session) => total + (session.duration || 0), 0);
+    
+    element.textContent = todayMinutes;
+  }
 }
 
 // ===== DATA MANAGEMENT =====
@@ -601,14 +680,53 @@ function resetProgress() {
   );
 }
 
+// ===== RESTORE TIMER UI =====
+function restoreTimerUI() {
+  const btn = document.getElementById('pomodoroBtn');
+  if (!btn) return;
+  
+  if (AppState.timer.isRunning) {
+    btn.innerHTML = '⏸️ Pause';
+    btn.className = 'btn btn-warning';
+    updatePomodoroStatus('Focus time! Stay concentrated and avoid distractions.');
+    
+    // Restart the timer interval
+    timerInterval = setInterval(() => {
+      AppState.timer.timeLeft--;
+      updateTimerDisplay();
+      updateProgressRing();
+      
+      if (AppState.timer.timeLeft <= 0) {
+        completePomodoro();
+      }
+    }, 1000);
+  } else if (AppState.timer.isPaused) {
+    btn.innerHTML = '▶️ Resume';
+    btn.className = 'btn btn-success';
+    updatePomodoroStatus('Timer paused. Click Resume when ready to continue.');
+  } else {
+    btn.innerHTML = '▶️ Start';
+    btn.className = 'btn btn-success';
+    updatePomodoroStatus('Ready to focus! Click Start to begin.');
+  }
+}
+
 // ===== INITIALIZATION =====
 document.addEventListener('DOMContentLoaded', function() {
+  // Load data first
   loadData();
-  initializeCharts();
-  updateStats();
-  updateCharts();
+  
+  // Initialize charts after a short delay to ensure DOM is ready
+  setTimeout(() => {
+    initializeCharts();
+    updateStats();
+    updateCharts();
+  }, 100);
+  
+  // Update UI elements
   updateTimerDisplay();
   updateProgressRing();
+  restoreTimerUI();
   
   // Auto-save every 30 seconds
   setInterval(saveData, 30000);
@@ -630,8 +748,42 @@ document.addEventListener('DOMContentLoaded', function() {
     saveData();
   });
   
-  // Initial status
-  updatePomodoroStatus('Ready to focus! Click Start to begin.');
-  
   console.log('🍅 Student Academic Companion initialized successfully!');
 });
+document.addEventListener('DOMContentLoaded', function() {
+  loadData();
+
+  setTimeout(() => {
+    initializeCharts();
+  }, 100);
+
+  setTimeout(() => {
+    updateStats();
+    updateCharts();
+  }, 300);
+
+  updateTimerDisplay();
+  updateProgressRing();
+  restoreTimerUI();
+});
+function toggleTheme() {
+  const body = document.body;
+  const currentTheme = body.classList.contains('dark-theme') ? 'dark' : 'light';
+
+  if (currentTheme === 'dark') {
+    body.classList.remove('dark-theme');
+    body.classList.add('light-theme');
+    localStorage.setItem('theme', 'light');
+  } else {
+    body.classList.remove('light-theme');
+    body.classList.add('dark-theme');
+    localStorage.setItem('theme', 'dark');
+  }
+}
+
+// Set initial theme on load
+document.addEventListener('DOMContentLoaded', () => {
+  const savedTheme = localStorage.getItem('theme') || 'dark';
+  document.body.classList.add(savedTheme + '-theme');
+});
+
