@@ -250,4 +250,45 @@ const NotesUploader = () => {
   </div>
 );
 }
+
+//   return (
+//     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
+//       <div className="bg-white shadow-xl rounded-xl p-8 w-full max-w-md">
+//         <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">📤 Upload Notes</h2>
+
+//         {status && (
+//           <div className="mb-4 text-sm text-center font-medium text-gray-700">
+//             {status}
+//           </div>
+//         )}
+
+//         <input
+//           type="text"
+//           placeholder="Enter tag (e.g., math, physics)"
+//           value={tag}
+//           onChange={(e) => setTag(e.target.value)}
+//           className="w-full px-4 py-2 mb-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+//         />
+
+//         <input
+//           type="file"
+//           multiple
+//           onChange={(e) => setFiles(Array.from(e.target.files))}
+//           className="w-full px-3 py-2 mb-4 border border-gray-300 rounded-lg bg-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200"
+//         />
+
+//         <button
+//           onClick={handleUpload}
+//           disabled={loading}
+//           className={`w-full py-2 rounded-lg text-white font-semibold transition duration-200 ${
+//             loading ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+//           }`}
+//         >
+//           {loading ? 'Uploading...' : 'Upload'}
+//         </button>
+//       </div>
+//     </div>
+//   );
+// };
+
 export default NotesUploader;
