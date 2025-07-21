@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-const ThemeToggle = ({ theme, setTheme }) => {
+const ToggleTheme = ({ theme, setTheme }) => {
   const [isLight, setIsLight] = useState(() => {
     return theme === "light"
   })
@@ -42,4 +42,4 @@ const ThemeToggle = ({ theme, setTheme }) => {
   )
 }
 
-export default ThemeToggle
+export default ToggleTheme
