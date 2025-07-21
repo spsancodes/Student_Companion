@@ -1,4 +1,4 @@
-// runNotifier.js
+
 import { sendPendingNotifications } from './sendNotification.js';
 import cron from 'node-cron';
 

@@ -42,41 +42,28 @@ const Calendar = ({ role }) => {
         .subscribe();
 
       // Subscribe to notifications table for actual reminders
-   const notificationChannel = supabase
-  .channel("user-notifications")
-  .on(
-    "postgres_changes",
-    {
-      event: "INSERT",
-      schema: "public",
-      table: "notifications",
-      filter: `user_id=eq.${currentUserId}`,
-    },
-    async (payload) => {
-      const notification = payload.new;
-      const now = new Date();
-      const sendAt = new Date(notification.send_at);
-
-      const timeDiff = Math.abs(now - sendAt);
-
-      if (sendAt <= now && timeDiff < 60000) {
-        // ✅ 1. Show the notification
-        showInstantNotification(notification.title, notification.body);
-
-        // ✅ 2. Mark it as sent
-        const { error } = await supabase
-          .from("notifications")
-          .update({ sent: true })
-          .eq("id", notification.id);
-
-        if (error) {
-          console.error("❌ Failed to mark notification as sent:", error.message);
-        }
-      }
-    }
-  )
-  .subscribe();
-
+      const notificationChannel = supabase
+        .channel("user-notifications")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${currentUserId}`,
+          },
+          (payload) => {
+            const notification = payload.new;
+            const now = new Date();
+            const sendAt = new Date(notification.send_at);
+            
+            
+            if (sendAt <= now) {
+              showInstantNotification(notification.title, notification.body);
+            }
+          }
+        )
+        .subscribe();
 
       return () => {
         supabase.removeChannel("calendar-events-channel");
@@ -175,79 +162,141 @@ const { data, error } = await supabase
     fetchEvents();
   }, []);
 
- const handleSaveEvent = async (newEvent) => {
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError) throw authError;
-      if (!user) throw new Error('No authenticated user');
+const handleSaveEvent = async (newEvent) => {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+    if (!user) throw new Error('No authenticated user');
 
-      const eventWithUser = {
-        ...newEvent,
-        created_by: user.id,
-        is_public: newEvent.is_personal ? false : true,
-        user_id: newEvent.is_personal ? user.id : null,
-      };
+    const eventWithUser = {
+      ...newEvent,
+      created_by: user.id,
+      is_public: newEvent.is_personal ? false : true,
+      user_id: newEvent.is_personal ? user.id : null,
+    };
 
-      const { data: insertedEvent, error } = await supabase
-        .from('calendar_events')
-        .insert([eventWithUser])
-        .select()
-        .single();
+    const { data: insertedEvent, error } = await supabase
+      .from('calendar_events')
+      .insert([eventWithUser])
+      .select()
+      .single();
 
-      if (error) throw error;
+    if (error) throw error;
 
-      // Schedule reminders
-      const reminderOffsets = insertedEvent.custom_reminder_offsets ?? [5, 2, 0.0333]; // default values in hours
-      const dueTimeUTC = new Date(`${insertedEvent.date}T${insertedEvent.start_time}Z`);
+    console.log('\n=== 🕒 DEBUGGING NOTIFICATION TIMING ===');
+    console.log('📅 Event Date:', insertedEvent.date);
+    console.log('⏰ Reminder Time:', insertedEvent.reminder_time);
 
-      const { data: students, error: studentError } = await supabase
-        .from("profiles")
-        .select("id")
-        .neq("role", "authority");
+    const reminderIST = new Date(insertedEvent.reminder_time);
+const dueTimeUTC = new Date(reminderIST.getTime() - (5.5 * 60 * 60 * 1000));  // ⏰ Keep as-is
+    console.log('🌍 Parsed UTC Reminder Time:', dueTimeUTC.toString());
 
-      if (studentError) throw studentError;
+    const { data: students, error: studentError } = await supabase
+      .from("profiles")
+      .select("id")
+      .neq("role", "admin")
+      
+      .neq("role", "authority");
+      
 
-      const notifications = [];
+    if (studentError) throw studentError;
 
-      for (const student of students) {
-        for (const offset of reminderOffsets) {
-          const sendAt = new Date(dueTimeUTC.getTime() - offset * 60 * 60 * 1000);
-          const roundedOffset = Math.round(offset * 100) / 100;
-          let timePhrase = "";
+    const notifications = [];
+    const reminderOffsets = [5, 2, 0.1667]; // Hours: 5h, 2h, 10min
 
-          if (roundedOffset >= 1) {
-            const hr = Math.floor(roundedOffset);
-            timePhrase = `${hr} hour${hr === 1 ? '' : 's'}`;
-          } else {
-            const mins = Math.round(roundedOffset * 60);
-            timePhrase = `${mins} minute${mins === 1 ? '' : 's'}`;
-          }
+    console.log('\n=== 🔔 CREATING NOTIFICATIONS ===');
+    console.log(`👨‍🎓 Students to notify: ${students.length}`);
+    console.log('⏱️ Reminder Offsets:', reminderOffsets);
 
-          notifications.push({
-            user_id: student.id,
-            event_id: insertedEvent.id,
-            title: `⏰ Reminder: ${insertedEvent.title}`,
-            body: `Due in ${timePhrase}`,
-            send_at: sendAt.toISOString(),
-            sent: false,
-            created_at: new Date().toISOString(),
-          });
+    // 📢 Immediate notification
+    for (const student of students) {
+      notifications.push({
+        user_id: student.id,
+        event_id: insertedEvent.id,
+        title: `📢 New Event: ${insertedEvent.title}`,
+        body: `An event was just added—check your calendar!`,
+        send_at: new Date().toISOString(), // current UTC
+        sent: false,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    // ⏰ Reminder notifications
+    for (const student of students) {
+      for (const offset of reminderOffsets) {
+        const offsetMs = offset * 60 * 60 * 1000;
+        const sendAt = new Date(dueTimeUTC.getTime() - offsetMs);
+
+        let timePhrase = '';
+        if (offset >= 1) {
+          const hr = Math.floor(offset);
+          timePhrase = `${hr} hour${hr === 1 ? '' : 's'}`;
+        } else {
+          const mins = Math.round(offset * 60);
+          timePhrase = `${mins} minute${mins === 1 ? '' : 's'}`;
         }
+
+        notifications.push({
+          user_id: student.id,
+          event_id: insertedEvent.id,
+          title: `⏰ Reminder in ${timePhrase}`,
+          body: `${insertedEvent.title} is coming up soon.`,
+          send_at: sendAt.toISOString(), // ⏰ UTC timestamp
+          sent: false,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    console.log('\n📊 Notification Preview:');
+    notifications.slice(0, 5).forEach((n, i) => {
+      console.log(`[${i + 1}] ${n.title} → Send at: ${n.send_at}`);
+    });
+
+    // ✅ Insert notifications with duplication check
+    for (const notification of notifications) {
+      const { user_id, event_id, send_at } = notification;
+
+      const { data: existing, error: fetchError } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', user_id)
+        .eq('event_id', event_id)
+        .eq('send_at', send_at)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error("❌ Failed to check for existing notification:", fetchError.message);
+        continue;
       }
 
-      const { error: notificationError } = await supabase
-        .from("notifications")
-        .insert(notifications);
+      if (!existing) {
+        const { error: insertError } = await supabase
+          .from('notifications')
+          .insert([notification]);
 
-      if (notificationError) throw notificationError;
-
-      setShowForm(false);
-      fetchEvents();
-    } catch (err) {
-      console.error('Error saving event:', err);
-      alert('Failed to save event: ' + err.message);
+        if (insertError) {
+          console.error("❌ Failed to insert notification:", insertError.message);
+        } else {
+          console.log(`✅ Notification created for event ${event_id} at ${send_at}`);
+        }
+      } else {
+        console.log(`🔁 Skipping duplicate notification for event ${event_id} at ${send_at}`);
+      }
     }
-  };
+
+    console.log('\n✅ All notifications saved. Closing form.');
+    setShowForm(false);
+    fetchEvents();
+
+  } catch (err) {
+    console.error('\n❌ Error saving event:', err);
+    alert('Failed to save event: ' + err.message);
+  }
+};
+
+
+
 
 const handleUpdateEvent = async (updatedEvent) => {
   try {

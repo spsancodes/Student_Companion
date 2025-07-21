@@ -29,6 +29,6 @@ firebase-key.json
 node_modules/
 dist/
 
-src/supabaseClient.jsx
+x
 src/firebase.js
 
